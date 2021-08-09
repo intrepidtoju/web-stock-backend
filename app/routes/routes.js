@@ -1,10 +1,13 @@
 'use strict';
-import config from '../config/config';
 import { errorMessage } from '../config/utils';
+import OrderRoute from '../modules/order/route';
+import ProductRoute from '../modules/product/route';
 import UsersRoute from '../modules/users/route';
 
-export default app => {
+export default (app) => {
   app.use('/api/v1/users', UsersRoute);
+  app.use('/api/v1/product', ProductRoute);
+  app.use('/api/v1/order', OrderRoute);
   app.use((err, req, res, next) => {
     if (err) {
       let message;

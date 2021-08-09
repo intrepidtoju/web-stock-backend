@@ -1,7 +1,7 @@
 'use strict';
 /* Development server config */
 const developmentConfig = {
-  DB_NAME: 'testProject',
+  DB_NAME: 'stock_db',
   DB_USERNAME: 'root',
   DB_PASSWORD: '',
   DB_HOST: 'localhost',

@@ -1,3 +1,4 @@
+import { DataTypes } from 'sequelize';
 import db from '../../config/db';
 import Order from '../order/model';
 

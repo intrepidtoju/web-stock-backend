@@ -1,5 +1,6 @@
 import { compareSync, hashSync } from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { DataTypes } from 'sequelize';
 import config from '../../config/config';
 import db from '../../config/db';
 

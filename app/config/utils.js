@@ -1,54 +1,19 @@
 'use strict';
-import nodeMailer from 'nodemailer';
-import config from './config';
-import jwt from 'jsonwebtoken';
-import multer, { diskStorage } from 'multer';
-import multerS3 from 'multer-s3';
-import aws from 'aws-sdk';
-import path from 'path';
-import Axios from 'axios';
 import cryptr from 'cryptr';
-import { readFile as ReadFile, unlink, existsSync, access } from 'fs';
-import Slugify from 'slugify';
-import { AllHtmlEntities } from 'html-entities';
+import { readFile as ReadFile } from 'fs';
+import jwt from 'jsonwebtoken';
+import config from './config';
 
-const entities = new AllHtmlEntities(),
-  crypto = new cryptr(config.CRYPTR_SECRET);
+const crypto = new cryptr(config.CRYPTR_SECRET);
 
 export const success = true;
 
-/* Send emails */
-export async function sendMail({ to, subject, body }) {
-  try {
-    const transporter = nodeMailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: config.MAILER_EMAIL,
-        pass: config.MAILER_PASSWORD,
-      },
-    });
-
-    await transporter.sendMail({
-      from: 'NGCareers <no_reply@ngcareers.com>',
-      to,
-      subject,
-      html: body,
-    });
-  } catch (err) {
-    throw err;
-  }
-}
-
 export function formatUrl(url) {
-  return (
-    config.BASE_URL + url.replace(/[ &#,+()$~%'"*<>{}]/g, '-').toLowerCase()
-  );
+  return config.BASE_URL + url.replace(/[ &#,+()$~%'"*<>{}]/g, '-').toLowerCase();
 }
 
 export function addBaseUrl(url) {
-  return (
-    config.BASE_URL + url.replace(/[ &#,+()$~%'"*<>{}]/g, '-').toLowerCase()
-  );
+  return config.BASE_URL + url.replace(/[ &#,+()$~%'"*<>{}]/g, '-').toLowerCase();
 }
 
 export function randomString(N) {
@@ -73,6 +38,20 @@ export function decodeJwt(headerToken) {
   });
 }
 
+export function jwtAuth() {
+  return async (req, res, next) => {
+    try {
+      let token = req.headers.authorization;
+      const data = decodeJwt(token);
+      console.log('data', data);
+      if (!data) throw Error('Supplied token not valid');
+      return next();
+    } catch (err) {
+      return res.status(err.httpStatusCode || 500).json(errorMessage('Kindly login to continue'));
+    }
+  };
+}
+
 export function errorMessage(err = void 0) {
   let message;
   if (err && err.errors) {
@@ -93,193 +72,6 @@ export function errorMessage(err = void 0) {
 
 export function successMessage(message) {
   return { success: true, message };
-}
-
-const s3 = new aws.S3({
-  accessKeyId: config.AWS_S3_ACCESS_KEY_ID,
-  secretAccessKey: config.AWS_S3_SECRET_ACCESS_KEY,
-  Bucket: config.AWS_S3_BUCKET,
-});
-
-export function uploadFile({
-  name = null,
-  /* 5mb default file upload limit */
-  limit = 5,
-  /* image format default file format */
-  allowedFormat = config.ALLOWED_IMAGE_FORMAT,
-  /* Location to store the file */
-  location = 'public/',
-}) {
-  /* Set storage to s3 */
-  const storage = multerS3({
-    s3: s3,
-    bucket: config.AWS_S3_BUCKET,
-    acl: 'public-read',
-    key: function(req, file, cb) {
-      name = Boolean(name) ? name : Date.now() + '-' + randomString(10);
-      const temp = `${location + file.fieldname}/${path.basename(
-        name + path.extname(file.originalname),
-      )}`;
-      cb(null, temp.toLowerCase());
-    },
-  });
-
-  /* Limit is converted to bytes from megabyte */
-  const limits = { fileSize: limit * 1000000 };
-
-  /* Restrict file format to allowed ones */
-  const fileFilter = (req, file, cb) => {
-    const fileFormat = file.originalname
-      .split('.')
-      .pop()
-      .toLowerCase();
-    if (allowedFormat.includes(fileFormat)) {
-      return cb(null, true);
-    } else {
-      return cb(
-        `File format not allowed, allowed formats are: ${allowedFormat.join(
-          ', ',
-        )}`,
-      );
-    }
-  };
-
-  return multer({ storage, limits, fileFilter });
-}
-
-export function uploadFileLocal({
-  // name = null,
-  limit = 5,
-  allowedFormat = config.ALLOWED_IMAGE_FORMAT,
-  location = config.IMAGE_PATH,
-}) {
-  // Set storage to local
-  const storage = diskStorage({
-    destination: function(req, file, cb) {
-      cb(null, location);
-    },
-    filename: (req, file, cb) => {
-      let mimetype = file.mimetype.split('/')[1];
-      const name = `${Date.now()}-${randomString(5)}.${mimetype}`;
-      cb(null, name);
-    },
-  });
-  /* Limit is converted to bytes from megabyte */
-  const limits = { fileSize: limit * 1000000 };
-
-  /* Restrict file format to allowed ones */
-  const fileFilter = (req, file, cb) => {
-    if (
-      allowedFormat.includes(
-        file.originalname
-          .split('.')
-          .pop()
-          .toLowerCase(),
-      )
-    ) {
-      return cb(null, true);
-    } else {
-      return cb(
-        `File format not allowed, allowed formats are: ${allowedFormat.join(
-          ', ',
-        )}`,
-      );
-    }
-  };
-
-  return multer({ storage, limits, fileFilter });
-}
-
-export async function deleteFileLocal(file) {
-  try {
-    /* Check if file exist */
-    access(file, async err => {
-      if (err) return err;
-      /* Remove file */
-      unlink(file, err => {
-        if (err) {
-          throw err;
-        }
-        return true;
-      });
-    });
-
-    return true;
-  } catch (err) {
-    throw err;
-  }
-}
-
-/* Download file from amazon s3 */
-export async function s3Download(link, res) {
-  try {
-    const Key = link.split('.com/').pop(),
-      Bucket = config.AWS_S3_BUCKET;
-
-    res.attachment(Key);
-    s3.getObject({ Key, Bucket })
-      .createReadStream()
-      .pipe(res);
-  } catch (err) {
-    throw err;
-  }
-}
-
-/* Delete file in amazon s3 */
-export async function s3Delete(fileUrl) {
-  try {
-    /* Get s3 key from file url */
-    const Key = fileUrl.split('.com/').pop(),
-      Bucket = config.AWS_S3_BUCKET,
-      params = { Key, Bucket };
-
-    /* Check if file exists */
-    await s3.headObject(params).promise();
-
-    /* Delete file */
-    await s3.deleteObject(params).promise();
-    return true;
-  } catch (err) {
-    if (err.code == 'NotFound') throw new Error('File not found');
-    throw err;
-  }
-}
-
-/* Send GET HTTP Request */
-export async function getContent(url, token) {
-  try {
-    const result = await Axios({
-      method: 'GET',
-      url,
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        Authorization: token,
-      },
-    });
-
-    return result.data;
-  } catch (err) {
-    throw err.response ? err.response.data || err.response : err;
-  }
-}
-
-/* Send POST HTTP Request */
-export async function postContent({ url, token, data, method = 'POST' }) {
-  try {
-    const result = await Axios({
-      method,
-      url,
-      data,
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        Authorization: token,
-      },
-    });
-
-    return result.data;
-  } catch (err) {
-    throw err.response ? err.response.data || err.response : err;
-  }
 }
 
 /* Encrypt and decrypt data */
@@ -342,16 +134,4 @@ export async function getUsers(payload, token) {
   } catch (err) {
     throw err;
   }
-}
-
-export function slugify(value) {
-  return Slugify(value).toLowerCase();
-}
-
-export function htmlEncode(value) {
-  return entities.encodeNonUTF(value);
-}
-
-export function htmlDecode(value) {
-  return entities.decode(value);
 }

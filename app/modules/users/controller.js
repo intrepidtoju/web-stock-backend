@@ -14,7 +14,8 @@ export async function register(req, res) {
 
 export async function login(req, res) {
   try {
-    res.status(200).json(req.user.getAuthJSON());
+    const result = await service.login(req.body);
+    res.status(200).json(result);
   } catch (error) {
     return res.status(500).json(errorMessage(error));
   }
